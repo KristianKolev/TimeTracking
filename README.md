@@ -60,7 +60,7 @@ TIMETRACKING_DATA_DIR=/absolute/host/path/to/data docker compose up -d --build
 For the OpenClaw workspace setup this can be:
 
 ```bash
-TIMETRACKING_DATA_DIR=/home/mightyraider/lab/openclaw/workspace/repos/TimeTracking/data docker compose up -d --build
+TIMETRACKING_DATA_DIR=/home/mightyraider/lab/TimeTracking/data docker compose up -d --build
 ```
 
 Back up that file to preserve all timesheets, projects, subtasks, and monthly entries.
