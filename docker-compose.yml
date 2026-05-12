@@ -7,4 +7,4 @@ services:
     ports:
       - "4173:3000"
     volumes:
-      - ./data:/data
+      - ${TIMETRACKING_DATA_DIR:-./data}:/data

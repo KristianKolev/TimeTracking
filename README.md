@@ -51,6 +51,18 @@ Data is saved on the host in:
 ./data/state.json
 ```
 
+If Docker is controlled from inside another container while the Docker daemon runs on the host, set an absolute host-visible data path before starting:
+
+```bash
+TIMETRACKING_DATA_DIR=/absolute/host/path/to/data docker compose up -d --build
+```
+
+For the OpenClaw workspace setup this can be:
+
+```bash
+TIMETRACKING_DATA_DIR=/home/mightyraider/lab/openclaw/workspace/repos/TimeTracking/data docker compose up -d --build
+```
+
 Back up that file to preserve all timesheets, projects, subtasks, and monthly entries.
 
 Restore from backup:
