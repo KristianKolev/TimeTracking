@@ -1,0 +1,10 @@
+services:
+  timetracking:
+    build: .
+    image: timetracking:latest
+    container_name: timetracking
+    restart: unless-stopped
+    ports:
+      - "4173:3000"
+    volumes:
+      - ./data:/data
