@@ -191,6 +191,7 @@ function render() {
   const design = designs.find(item => item.id === state.design) || designs[0];
   document.body.className = design.className;
   const days = monthDays(state.year, state.month);
+  ensureWeekCollapseDefaults(days);
   const columns = taskColumns();
   const totals = calculateTotals(days, columns);
   const app = document.getElementById("app");
@@ -312,12 +313,12 @@ function render() {
           <aside class="side">
             <section class="panel">
               <div class="section-head"><h2>Weekly Forecast</h2></div>
-              <div class="side-body week-list">${weekTemplates(days, columns)}</div>
+              <div class="side-body week-list" id="weeklyForecastBody">${weekTemplates(days, columns)}</div>
             </section>
 
             <section class="panel">
               <div class="section-head"><h2>Validation</h2><span>${warnings.length} warning${warnings.length === 1 ? "" : "s"}</span></div>
-              <div class="side-body">${validationPanel(warnings)}</div>
+              <div class="side-body" id="validationBody">${validationPanel(warnings)}</div>
             </section>
 
             <section class="panel">
@@ -332,12 +333,12 @@ function render() {
 
             <section class="panel">
               <div class="section-head"><h2>Category Mix</h2></div>
-              <div class="side-body">${categoryMix(totals, columns)}</div>
+              <div class="side-body" id="categoryMixBody">${categoryMix(totals, columns)}</div>
             </section>
 
             <section class="panel">
               <div class="section-head"><h2>Trends</h2></div>
-              <div class="side-body">${trendPanel(columns)}</div>
+              <div class="side-body" id="trendBody">${trendPanel(columns)}</div>
             </section>
           </aside>
         </section>
@@ -416,18 +417,19 @@ function bindEvents() {
       const key = event.target.dataset.key;
       const entry = getEntry(date);
       if (key === "start" || key === "end") entry[key] = normalizeTime(event.target.value);
+      else if (event.target.dataset.number === "decimal") entry[key] = parseDecimalInput(event.target.value);
       else if (event.target.type === "number") entry[key] = Number(event.target.value || 0);
       else entry[key] = event.target.value;
       activeEntries()[date] = entry;
       save();
-      render();
+      refreshCalculationsInPlace(date);
     });
   });
 
   document.querySelectorAll("[data-week-toggle]").forEach(button => {
     button.addEventListener("click", event => {
       const week = event.currentTarget.dataset.weekToggle;
-      collapsedWeeks()[week] = !collapsedWeeks()[week];
+      collapsedWeeks()[week] = !isWeekCollapsed(week);
       save();
       render();
     });
@@ -667,6 +669,49 @@ function setMonthValue(value) {
   render();
 }
 
+function refreshCalculationsInPlace(date) {
+  const columns = taskColumns();
+  const days = monthDays(state.year, state.month);
+  const day = days.find(item => item.iso === date);
+  if (day) {
+    const entry = getEntry(date);
+    const actual = actualHours(entry, day, hasEntry(date));
+    const reported = reportedHours(entry, columns);
+    const gap = actual - reported;
+    const row = document.querySelector(`[data-row-date="${date}"]`);
+    row?.querySelector('[data-cell="actual"]')?.replaceChildren(document.createTextNode(hours(actual)));
+    row?.querySelector('[data-cell="reported"]')?.replaceChildren(document.createTextNode(hours(reported)));
+    const gapCell = row?.querySelector('[data-cell="gap"]');
+    if (gapCell) {
+      gapCell.textContent = signedHours(gap);
+      gapCell.classList.toggle("negative", gap < 0);
+      gapCell.classList.toggle("positive", gap >= 0);
+    }
+  }
+
+  const totals = calculateTotals(days, columns);
+  const warnings = validationWarnings(days, columns);
+  const summary = document.querySelector(".summary-grid");
+  if (summary) {
+    summary.innerHTML = `
+      ${metric("Workdays", totals.targetDays, `${totals.holidays} holiday${totals.holidays === 1 ? "" : "s"} deducted`)}
+      ${metric("Month target", hours(totals.targetHours), "Sick and OOO days stay in target")}
+      ${metric("Actual logged", hours(totals.actualHours), `${hours(totals.monthRemaining)} remaining`)}
+      ${metric("Reported", hours(totals.reportedHours), `${signedHours(totals.reportedVsActual)} vs actual`)}
+      ${metric("Extra time", hours(totals.extraHours), "Outside core working hours")}`;
+  }
+  const weekly = document.getElementById("weeklyForecastBody");
+  if (weekly) weekly.innerHTML = weekTemplates(days, columns);
+  const validation = document.getElementById("validationBody");
+  if (validation) validation.innerHTML = validationPanel(warnings);
+  const validationCount = validation?.closest(".panel")?.querySelector(".section-head span");
+  if (validationCount) validationCount.textContent = `${warnings.length} warning${warnings.length === 1 ? "" : "s"}`;
+  const category = document.getElementById("categoryMixBody");
+  if (category) category.innerHTML = categoryMix(totals, columns);
+  const trend = document.getElementById("trendBody");
+  if (trend) trend.innerHTML = trendPanel(columns);
+}
+
 function timesheetRows(days, columns) {
   let currentWeek = "";
   return days.map(day => {
@@ -676,7 +721,7 @@ function timesheetRows(days, columns) {
       currentWeek = week;
       rows.push(weekHeaderRow(week, days.filter(candidate => isoWeekKey(candidate.date) === week), columns));
     }
-    if (!collapsedWeeks()[week]) rows.push(rowTemplate(day, columns));
+    if (!isWeekCollapsed(week)) rows.push(rowTemplate(day, columns));
     return rows.join("");
   }).join("");
 }
@@ -685,10 +730,11 @@ function weekHeaderRow(week, weekDays, columns) {
   const target = weekDays.reduce((sum, day) => sum + targetHours(day), 0);
   const actual = weekDays.reduce((sum, day) => sum + actualHours(getEntry(day.iso), day, hasEntry(day.iso)), 0);
   const remaining = Math.max(0, target - actual);
-  const collapsed = Boolean(collapsedWeeks()[week]);
+  const collapsed = isWeekCollapsed(week);
+  const current = isCurrentWeek(week);
   const start = weekDays[0].label;
   const end = weekDays[weekDays.length - 1].label;
-  return `<tr class="week-toggle-row">
+  return `<tr class="week-toggle-row ${current ? "current-week" : ""}">
     <td colspan="${10 + columns.length}">
       <button type="button" data-week-toggle="${week}" aria-expanded="${!collapsed}">
         <span>${collapsed ? "+" : "-"}</span>
@@ -706,9 +752,11 @@ function rowTemplate(day, columns) {
   const reported = reportedHours(entry, columns);
   const gap = actual - reported;
   const isWeekStart = day.date.getDay() === 1 || day.date.getDate() === 1;
+  const currentWeek = isCurrentWeek(isoWeekKey(day.date));
   const offDay = entry.status === "sick" || entry.status === "ooo" || entry.status === "free";
   const classNames = [
     isWeekStart ? "week-start" : "",
+    currentWeek ? "current-week" : "",
     day.isWeekend ? "weekend" : "",
     day.holiday ? "holiday" : "",
     offDay ? "offday" : "",
@@ -717,7 +765,7 @@ function rowTemplate(day, columns) {
   const holidayLabel = day.holiday ? ` title="${day.holiday}"` : "";
   const disabled = isMonthClosed() ? "disabled" : "";
 
-  return `<tr class="${classNames}"${holidayLabel}>
+  return `<tr class="${classNames}" data-row-date="${day.iso}"${holidayLabel}>
     <td><strong>${day.label}</strong> <span class="day-name">${day.weekday}</span></td>
     <td>
       <select data-date="${day.iso}" data-key="status" aria-label="Status for ${day.iso}" ${disabled}>
@@ -732,11 +780,11 @@ function rowTemplate(day, columns) {
     <td><input type="number" min="0" step="5" data-date="${day.iso}" data-key="breakMinutes" value="${entry.breakMinutes}" ${disabled}></td>
     <td><input type="text" inputmode="numeric" pattern="[0-2][0-9]:[0-5][0-9]" placeholder="17:00" data-date="${day.iso}" data-key="end" value="${entry.end}" ${disabled}></td>
     <td><input type="number" min="0" step="5" data-date="${day.iso}" data-key="extraMinutes" value="${entry.extraMinutes}" ${disabled}></td>
-    <td class="num">${hours(actual)}</td>
-    <td class="num">${hours(reported)}</td>
-    <td class="delta ${gap < 0 ? "negative" : "positive"}">${signedHours(gap)}</td>
+    <td class="num" data-cell="actual">${hours(actual)}</td>
+    <td class="num" data-cell="reported">${hours(reported)}</td>
+    <td class="delta ${gap < 0 ? "negative" : "positive"}" data-cell="gap">${signedHours(gap)}</td>
     <td><input class="comment-input" type="text" data-date="${day.iso}" data-key="comment" value="${escapeHtml(entry.comment || "")}" placeholder="${day.holiday || "Note"}" ${disabled}></td>
-    ${columns.map((column, index) => `<td class="${isProjectStart(columns, index) ? "group-separator" : ""}"><input type="number" min="0" step="0.25" data-date="${day.iso}" data-key="${column.taskId}" value="${entry[column.taskId] || 0}" ${disabled}></td>`).join("")}
+    ${columns.map((column, index) => `<td class="${isProjectStart(columns, index) ? "group-separator" : ""}"><input class="decimal-input" type="text" inputmode="decimal" data-number="decimal" data-date="${day.iso}" data-key="${column.taskId}" value="${formatEntryNumber(entry[column.taskId] || 0)}" ${disabled}></td>`).join("")}
   </tr>`;
 }
 
@@ -1068,6 +1116,27 @@ function collapsedWeeks() {
   return state.collapsedWeeks[key];
 }
 
+function ensureWeekCollapseDefaults(days) {
+  const weeks = collapsedWeeks();
+  if (weeks.__defaultMode === "current-week-v1") return;
+  [...new Set(days.map(day => isoWeekKey(day.date)))].forEach(week => {
+    weeks[week] = !isCurrentWeek(week);
+  });
+  weeks.__defaultMode = "current-week-v1";
+}
+
+function isWeekCollapsed(week) {
+  const explicit = collapsedWeeks()[week];
+  if (explicit !== undefined) return Boolean(explicit);
+  return !isCurrentWeek(week);
+}
+
+function isCurrentWeek(week) {
+  const today = dateFromIso(todayIso);
+  if (today.getFullYear() !== state.year || today.getMonth() !== state.month) return false;
+  return isoWeekKey(today) === week;
+}
+
 function taskColumns() {
   const sheet = activeTimesheet();
   return state.projects
@@ -1246,6 +1315,12 @@ function minutes(value) {
   return hour * 60 + minute;
 }
 
+function parseDecimalInput(value) {
+  const normalized = String(value || "").trim().replace(",", ".");
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
 function normalizeTime(value) {
   const cleaned = String(value || "").trim();
   const match = cleaned.match(/^(\d{1,2}):?(\d{2})$/);
@@ -1258,6 +1333,11 @@ function normalizeTime(value) {
 
 function hours(value) {
   return `${(Math.round(value * 100) / 100).toFixed(2)}h`;
+}
+
+function formatEntryNumber(value) {
+  const number = Number(value) || 0;
+  return Number.isInteger(number) ? String(number) : String(Math.round(number * 100) / 100);
 }
 
 function signedHours(value) {

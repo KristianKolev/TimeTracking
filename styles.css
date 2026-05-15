@@ -488,12 +488,14 @@ tbody input[type="text"]:not(.comment-input) {
   min-width: 76px;
 }
 
-tbody input[type="number"] {
+tbody input[type="number"],
+tbody input.decimal-input {
   width: 76px;
   min-width: 76px;
 }
 
-tbody td:nth-child(n + 11) input[type="number"] {
+tbody td:nth-child(n + 11) input[type="number"],
+tbody td:nth-child(n + 11) input.decimal-input {
   width: 88px;
   min-width: 88px;
 }
@@ -586,6 +588,30 @@ tbody select {
 .offday input,
 .offday select {
   background: color-mix(in srgb, var(--accent-2) 18%, var(--surface));
+}
+
+.week-toggle-row.current-week td {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--accent-3) 24%, var(--surface)),
+    color-mix(in srgb, var(--accent) 18%, var(--surface))
+  );
+  border-top-color: var(--accent-3);
+  border-bottom-color: var(--accent-3);
+  box-shadow: inset 0 1px 0 var(--accent-3), inset 0 -1px 0 var(--accent-3);
+}
+
+.week-toggle-row.current-week button {
+  box-shadow: inset 3px 0 0 var(--accent-3);
+}
+
+tr.current-week:not(.weekend):not(.holiday):not(.offday):not(.today) td {
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+}
+
+tr.current-week:not(.weekend):not(.holiday):not(.offday):not(.today) input,
+tr.current-week:not(.weekend):not(.holiday):not(.offday):not(.today) select {
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
 }
 
 .num,

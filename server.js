@@ -104,7 +104,7 @@ async function serveStatic(request, response) {
 
   const extension = path.extname(filePath);
   const headers = {
-    "Cache-Control": extension === ".html" ? "no-store" : "public, max-age=3600",
+    "Cache-Control": "no-store",
     "X-Content-Type-Options": "nosniff",
     "X-Frame-Options": "SAMEORIGIN",
     "Referrer-Policy": "strict-origin-when-cross-origin"
