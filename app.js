@@ -940,7 +940,7 @@ function getEntry(date) {
     end: isWeekend || holiday ? "" : state.config.coreEnd,
     breakMinutes: isWeekend || holiday ? 0 : state.config.breakMinutes,
     extraMinutes: 0,
-    status: "work"
+    status: isWeekend || holiday ? "free" : "work"
   };
   return { ...defaults, ...(activeEntries()[date] || {}) };
 }

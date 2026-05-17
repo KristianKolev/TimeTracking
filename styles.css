@@ -564,18 +564,28 @@ tbody select {
   background: color-mix(in srgb, #2e4650 28%, var(--surface));
 }
 
-.holiday td,
 .offday td {
   background: color-mix(in srgb, var(--accent-2) 22%, var(--surface));
+}
+
+.holiday td {
+  background: color-mix(in srgb, var(--accent-3) 26%, var(--surface));
+}
+
+.weekend.offday td {
+  background: color-mix(in srgb, #2e4650 28%, var(--surface));
 }
 
 .today td {
   background: color-mix(in srgb, var(--accent-3) 18%, var(--surface));
 }
 
-.holiday.today td,
 .offday.today td {
   background: color-mix(in srgb, var(--accent-2) 24%, var(--surface));
+}
+
+.holiday.today td {
+  background: color-mix(in srgb, var(--accent-3) 30%, var(--surface));
 }
 
 .weekend input,
@@ -583,11 +593,19 @@ tbody select {
   background: color-mix(in srgb, #2e4650 22%, var(--surface));
 }
 
-.holiday input,
-.holiday select,
 .offday input,
 .offday select {
   background: color-mix(in srgb, var(--accent-2) 18%, var(--surface));
+}
+
+.holiday input,
+.holiday select {
+  background: color-mix(in srgb, var(--accent-3) 18%, var(--surface));
+}
+
+.weekend.offday input,
+.weekend.offday select {
+  background: color-mix(in srgb, #2e4650 22%, var(--surface));
 }
 
 .week-toggle-row.current-week td {
