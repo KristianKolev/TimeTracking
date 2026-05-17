@@ -852,7 +852,7 @@ function validationWarnings(days, columns) {
     if (actual > target + 2 && target > 0) warnings.push({ date: day.label, message: `Actual ${hours(actual)} is more than 2h above target.` });
     if (actual > 0 && reported === 0) warnings.push({ date: day.label, message: "Actual time exists but no task hours are reported." });
     if (hasComment && actual === 0) warnings.push({ date: day.label, message: "Comment exists on a zero-hour day." });
-    if ((day.isWeekend || day.holiday) && reported > 0) warnings.push({ date: day.label, message: `Weekend/holiday has ${hours(reported)} reported task hours.` });
+    if ((day.isWeekend || day.holiday) && reported > 0 && actual === 0) warnings.push({ date: day.label, message: `Weekend/holiday has ${hours(reported)} reported task hours but no actual time.` });
   });
   return warnings;
 }
@@ -918,7 +918,7 @@ function calculateTotals(days, columns) {
     totals.targetHours += target;
     totals.actualHours += actualHours(entry, day, logged);
     totals.reportedHours += reportedHours(entry, columns);
-    if (logged && !day.isWeekend && !day.holiday && !offDay) {
+    if (logged && entry.status !== "sick" && entry.status !== "ooo") {
       totals.extraHours += (Number(entry.extraMinutes) || 0) / 60;
     }
     columns.forEach(column => {
@@ -951,11 +951,11 @@ function hasEntry(date) {
 
 function actualHours(entry, day, logged) {
   if (!logged) return 0;
-  if (day.isWeekend || day.holiday || entry.status === "sick" || entry.status === "ooo" || entry.status === "free") return 0;
+  if (entry.status === "sick" || entry.status === "ooo") return 0;
   const start = minutes(entry.start);
   const end = minutes(entry.end);
-  if (start == null || end == null || end <= start) return 0;
-  return Math.max(0, (end - start - Number(entry.breakMinutes || 0) + Number(entry.extraMinutes || 0)) / 60);
+  const baseMinutes = start == null || end == null || end <= start ? 0 : end - start - Number(entry.breakMinutes || 0);
+  return Math.max(0, (baseMinutes + Number(entry.extraMinutes || 0)) / 60);
 }
 
 function reportedHours(entry, columns) {
