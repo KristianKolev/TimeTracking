@@ -2,6 +2,8 @@ const MS_DAY = 86400000;
 const todayIso = new Date().toISOString().slice(0, 10);
 const CURRENT_SCHEMA_VERSION = 1;
 let persistenceBlocked = false;
+let editingEntity = "";
+const initializedCollapseMonths = new Set();
 
 const designs = [
   { id: "ledger", label: "Ledger", className: "" },
@@ -138,6 +140,7 @@ function ensureStateShape() {
   state.timesheets.forEach(sheet => {
     if (!state.entries[sheet.id]) state.entries[sheet.id] = {};
   });
+  normalizeOffDayWorkDefaults();
 }
 
 function save() {
@@ -282,6 +285,8 @@ function render() {
           ${metric("Reported", hours(totals.reportedHours), `${signedHours(totals.reportedVsActual)} vs actual`)}
           ${metric("Extra time", hours(totals.extraHours), "Outside core working hours")}
         </section>
+
+        ${isHistoricalMonth(days) ? `<div class="historical-banner">Viewing historical month</div>` : ""}
 
         <section class="main-grid">
           <div class="panel">
@@ -430,8 +435,17 @@ function bindEvents() {
     button.addEventListener("click", event => {
       const week = event.currentTarget.dataset.weekToggle;
       collapsedWeeks()[week] = !isWeekCollapsed(week);
+      initializedCollapseMonths.add(monthKey());
       save();
       render();
+    });
+  });
+
+  document.querySelectorAll("[data-edit-entity]").forEach(button => {
+    button.addEventListener("click", event => {
+      editingEntity = event.currentTarget.dataset.editEntity;
+      render();
+      document.querySelector(`[data-editing-entity="${cssEscape(editingEntity)}"]`)?.focus();
     });
   });
 
@@ -535,6 +549,7 @@ function bindEvents() {
       const sheet = state.timesheets.find(item => item.id === event.target.dataset.renameSheet);
       const name = event.target.value.trim();
       if (sheet && name) sheet.name = name;
+      editingEntity = "";
       save();
       render();
     });
@@ -545,6 +560,7 @@ function bindEvents() {
       const project = state.projects.find(item => item.id === event.target.dataset.renameProject);
       const name = event.target.value.trim();
       if (project && name) project.name = name;
+      editingEntity = "";
       save();
       render();
     });
@@ -556,6 +572,7 @@ function bindEvents() {
       const task = state.projects.find(project => project.id === projectId)?.tasks.find(item => item.id === taskId);
       const name = event.target.value.trim();
       if (task && name) task.name = name;
+      editingEntity = "";
       save();
       render();
     });
@@ -665,6 +682,7 @@ function setMonthValue(value) {
   const [year, month] = value.split("-").map(Number);
   state.year = year;
   state.month = month - 1;
+  initializedCollapseMonths.delete(monthKey());
   save();
   render();
 }
@@ -831,11 +849,21 @@ function categoryMix(totals, columns) {
 
 function validationPanel(warnings) {
   if (!warnings.length) return `<p class="empty-note">No warnings for this month.</p>`;
-  return `<div class="warning-list">${warnings.map(warning => `
-    <div class="warning-item">
-      <strong>${escapeHtml(warning.date)}</strong>
-      <span>${escapeHtml(warning.message)}</span>
-    </div>`).join("")}</div>`;
+  const grouped = warnings.reduce((groups, warning) => {
+    const type = warning.type || "General";
+    if (!groups.has(type)) groups.set(type, []);
+    groups.get(type).push(warning);
+    return groups;
+  }, new Map());
+  return `<div class="warning-list">${[...grouped.entries()].map(([type, items], index) => `
+    <details class="warning-group" ${index === 0 ? "open" : ""}>
+      <summary><strong>${escapeHtml(type)}</strong><span>${items.length}</span></summary>
+      ${items.map(warning => `
+        <div class="warning-item">
+          <strong>${escapeHtml(warning.date)}</strong>
+          <span>${escapeHtml(warning.message)}</span>
+        </div>`).join("")}
+    </details>`).join("")}</div>`;
 }
 
 function validationWarnings(days, columns) {
@@ -848,11 +876,11 @@ function validationWarnings(days, columns) {
     const target = targetHours(day);
     const hasComment = Boolean((entry.comment || "").trim());
 
-    if (reported > actual && actual > 0) warnings.push({ date: day.label, message: `Reported ${hours(reported)} exceeds actual ${hours(actual)}.` });
-    if (actual > target + 2 && target > 0) warnings.push({ date: day.label, message: `Actual ${hours(actual)} is more than 2h above target.` });
-    if (actual > 0 && reported === 0) warnings.push({ date: day.label, message: "Actual time exists but no task hours are reported." });
-    if (hasComment && actual === 0) warnings.push({ date: day.label, message: "Comment exists on a zero-hour day." });
-    if ((day.isWeekend || day.holiday) && reported > 0 && actual === 0) warnings.push({ date: day.label, message: `Weekend/holiday has ${hours(reported)} reported task hours but no actual time.` });
+    if (reported > actual && actual > 0) warnings.push({ type: "Reported exceeds actual", date: day.label, message: `Reported ${hours(reported)} exceeds actual ${hours(actual)}.` });
+    if (actual > target + 2 && target > 0) warnings.push({ type: "Actual above target", date: day.label, message: `Actual ${hours(actual)} is more than 2h above target.` });
+    if (actual > 0 && reported === 0) warnings.push({ type: "Missing reported hours", date: day.label, message: "Actual time exists but no task hours are reported." });
+    if (hasComment && actual === 0) warnings.push({ type: "Comment without hours", date: day.label, message: "Comment exists on a zero-hour day." });
+    if ((day.isWeekend || day.holiday) && reported > 0 && actual === 0) warnings.push({ type: "Off-day reported hours", date: day.label, message: `Weekend/holiday has ${hours(reported)} reported task hours but no actual time.` });
   });
   return warnings;
 }
@@ -947,6 +975,18 @@ function getEntry(date) {
 
 function hasEntry(date) {
   return Boolean(activeEntries()[date]);
+}
+
+function normalizeOffDayWorkDefaults() {
+  Object.values(state.entries).forEach(entriesByDate => {
+    Object.entries(entriesByDate).forEach(([date, entry]) => {
+      if (!entry || entry.status !== "work") return;
+      const day = dateFromIso(date);
+      const isWeekend = day.getDay() === 0 || day.getDay() === 6;
+      const holiday = holidayName(day.getFullYear(), day.getMonth(), day.getDate());
+      if (isWeekend || holiday) entry.status = "free";
+    });
+  });
 }
 
 function actualHours(entry, day, logged) {
@@ -1117,12 +1157,14 @@ function collapsedWeeks() {
 }
 
 function ensureWeekCollapseDefaults(days) {
+  const key = monthKey();
+  if (initializedCollapseMonths.has(key)) return;
   const weeks = collapsedWeeks();
-  if (weeks.__defaultMode === "current-week-v1") return;
   [...new Set(days.map(day => isoWeekKey(day.date)))].forEach(week => {
     weeks[week] = !isCurrentWeek(week);
   });
   weeks.__defaultMode = "current-week-v1";
+  initializedCollapseMonths.add(key);
 }
 
 function isWeekCollapsed(week) {
@@ -1135,6 +1177,10 @@ function isCurrentWeek(week) {
   const today = dateFromIso(todayIso);
   if (today.getFullYear() !== state.year || today.getMonth() !== state.month) return false;
   return isoWeekKey(today) === week;
+}
+
+function isHistoricalMonth(days) {
+  return !days.some(day => isCurrentWeek(isoWeekKey(day.date)));
 }
 
 function taskColumns() {
@@ -1181,26 +1227,35 @@ function monthKeysForActiveSheet() {
 function sheetCard(sheet) {
   const active = sheet.id === state.activeTimesheetId;
   const canDelete = state.timesheets.length > 1;
+  const editId = `sheet:${sheet.id}`;
   return `<div class="sheet-card ${active ? "active" : ""}" data-sheet-id="${sheet.id}">
     <span>
-      <input type="text" data-rename-sheet="${sheet.id}" value="${escapeHtml(sheet.name)}" aria-label="Rename ${escapeHtml(sheet.name)}">
+      ${editableName(editId, "sheet", sheet.id, sheet.name)}
       <small>${sheet.projectIds.length} project${sheet.projectIds.length === 1 ? "" : "s"}</small>
     </span>
-    ${canDelete ? `<button type="button" data-delete-sheet="${sheet.id}" aria-label="Delete ${escapeHtml(sheet.name)}">Delete</button>` : ""}
+    <span class="entity-actions">
+      <button type="button" data-edit-entity="${editId}" aria-label="Rename ${escapeHtml(sheet.name)}">...</button>
+      ${canDelete ? `<button type="button" data-delete-sheet="${sheet.id}" aria-label="Delete ${escapeHtml(sheet.name)}">x</button>` : ""}
+    </span>
   </div>`;
 }
 
 function projectToggle(project, sheet) {
   const checked = sheet.projectIds.includes(project.id);
+  const editId = `project:${project.id}`;
+  const usage = projectUsage(project.id);
   return `<div class="project-toggle">
     <label>
       <input type="checkbox" data-project-toggle="${project.id}" ${checked ? "checked" : ""}>
       <span>
-        <input type="text" data-rename-project="${project.id}" value="${escapeHtml(project.name)}" aria-label="Rename ${escapeHtml(project.name)}">
-        <small>${project.tasks.length} subtask${project.tasks.length === 1 ? "" : "s"} · used in ${projectUsage(project.id)} timesheet${projectUsage(project.id) === 1 ? "" : "s"}</small>
+        ${editableName(editId, "project", project.id, project.name)}
+        <small>${project.tasks.length} subtask${project.tasks.length === 1 ? "" : "s"} - used in ${usage} timesheet${usage === 1 ? "" : "s"}</small>
       </span>
     </label>
-    <button type="button" data-delete-project="${project.id}" aria-label="Delete ${escapeHtml(project.name)}">Delete</button>
+    <span class="entity-actions">
+      <button type="button" data-edit-entity="${editId}" aria-label="Rename ${escapeHtml(project.name)}">...</button>
+      <button type="button" data-delete-project="${project.id}" aria-label="Delete ${escapeHtml(project.name)}">x</button>
+    </span>
   </div>`;
 }
 
@@ -1209,10 +1264,26 @@ function projectTaskList(project) {
     <strong>${escapeHtml(project.name)}</strong>
     <span>${project.tasks.map(task => `
       <span class="task-chip">
-        <input type="text" data-rename-task="${project.id}:${task.id}" value="${escapeHtml(task.name)}" aria-label="Rename ${escapeHtml(task.name)}">
-        <button type="button" data-delete-task="${project.id}:${task.id}" title="Delete ${escapeHtml(task.name)}">Delete</button>
+        ${editableName(`task:${project.id}:${task.id}`, "task", `${project.id}:${task.id}`, task.name)}
+        <span class="entity-actions">
+          <button type="button" data-edit-entity="task:${project.id}:${task.id}" aria-label="Rename ${escapeHtml(task.name)}">...</button>
+          <button type="button" data-delete-task="${project.id}:${task.id}" title="Delete ${escapeHtml(task.name)}">x</button>
+        </span>
       </span>`).join("") || "No subtasks yet"}</span>
   </div>`;
+}
+
+function editableName(editId, kind, id, name) {
+  if (editingEntity === editId) {
+    const attr = kind === "sheet" ? "data-rename-sheet" : kind === "project" ? "data-rename-project" : "data-rename-task";
+    return `<input type="text" ${attr}="${id}" data-editing-entity="${editId}" value="${escapeHtml(name)}" aria-label="Rename ${escapeHtml(name)}">`;
+  }
+  return `<strong class="entity-name">${escapeHtml(name)}</strong>`;
+}
+
+function cssEscape(value) {
+  if (window.CSS?.escape) return CSS.escape(value);
+  return value.replace(/["\\]/g, "\\$&");
 }
 
 function taskProjectHint() {

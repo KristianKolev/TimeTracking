@@ -136,13 +136,22 @@ select {
 }
 
 .notice,
-.closed-banner {
+.closed-banner,
+.historical-banner {
   margin: 0 0 18px;
   padding: 10px 12px;
   border: 1px solid color-mix(in srgb, var(--accent-3) 55%, var(--line));
   border-radius: 8px;
   background: color-mix(in srgb, var(--accent-3) 14%, var(--surface));
   color: var(--ink);
+}
+
+.historical-banner {
+  margin-top: -6px;
+  border-color: var(--line);
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 0.86rem;
 }
 
 .summary-grid {
@@ -218,7 +227,8 @@ select {
 }
 
 .sheet-card button,
-.project-toggle button {
+.project-toggle button,
+.entity-actions button {
   min-height: 30px;
   padding: 0 8px;
   color: var(--muted);
@@ -305,6 +315,34 @@ select {
   background: color-mix(in srgb, var(--surface-2) 70%, var(--surface));
 }
 
+.entity-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.9rem;
+}
+
+.entity-actions {
+  display: inline-flex;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.sheet-card > .entity-actions,
+.project-toggle > .entity-actions {
+  display: inline-flex;
+}
+
+.entity-actions button {
+  width: 30px;
+  min-width: 30px;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--surface-2) 70%, var(--surface));
+  color: var(--muted);
+  line-height: 1;
+}
+
 .empty-note {
   margin: 0;
   color: var(--muted);
@@ -317,15 +355,43 @@ select {
   gap: 8px;
 }
 
+.warning-group {
+  border: 1px solid color-mix(in srgb, var(--accent-2) 35%, var(--line));
+  border-radius: 7px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--accent-2) 6%, var(--surface));
+}
+
+.warning-group summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  min-height: 34px;
+  padding: 0 10px;
+  cursor: pointer;
+  color: var(--ink);
+  font-size: 0.82rem;
+}
+
+.warning-group summary span {
+  min-width: 24px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent-2) 14%, var(--surface));
+  color: var(--muted);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
 .warning-item {
   display: grid;
   grid-template-columns: 48px minmax(0, 1fr);
   gap: 8px;
   align-items: start;
   padding: 8px;
-  border: 1px solid color-mix(in srgb, var(--accent-2) 45%, var(--line));
-  border-radius: 7px;
-  background: color-mix(in srgb, var(--accent-2) 10%, var(--surface));
+  border-top: 1px solid color-mix(in srgb, var(--accent-2) 26%, var(--line));
+  background: color-mix(in srgb, var(--accent-2) 8%, var(--surface));
   font-size: 0.82rem;
 }
 
